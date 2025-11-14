@@ -1,21 +1,17 @@
 import Link from "next/link";
+import Avatar from "./Avatar";
 
-export default function Message({ message }) {
-  const sender = message.user;
-
+export default function Message({ message, profile }) {
   return (
     <div className="flex gap-3 p-2 items-start">
-      <Link href={`/u/${sender?.id}`}>
-        <img
-          src={sender?.pfp || "/default.png"}
-          className="w-10 h-10 rounded-full cursor-pointer"
-        />
+      <Link href={`/u/${profile?.id}`}>
+        <Avatar src={profile?.pfp} size={40} />
       </Link>
 
       <div>
-        <Link href={`/u/${sender?.id}`}>
+        <Link href={`/u/${profile?.id}`}>
           <div className="font-bold hover:underline cursor-pointer">
-            {sender?.username || "Unknown"}
+            {profile?.username || "Unknown"}
           </div>
         </Link>
 

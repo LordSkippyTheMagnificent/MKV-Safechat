@@ -1,52 +1,84 @@
-import Layout from '~/components/Layout'
-import Message from '~/components/Message'
-import MessageInput from '~/components/MessageInput'
-import { useRouter } from 'next/router'
-import { useStore, addMessage } from '~/lib/Store'
-import { useContext, useEffect, useRef } from 'react'
-import UserContext from '~/lib/UserContext'
+import { supabase } from "../../lib/Store";
+import Message from "../../components/Message";
+import { useEffect, useState } from "react";
 
-const ChannelsPage = (props) => {
-  const router = useRouter()
-  const { user, authLoaded, signOut } = useContext(UserContext)
-  const messagesEndRef = useRef(null)
+export default function ChannelPage({ initialMessages, initialProfiles }) {
+  const [messages, setMessages] = useState(initialMessages);
+  const [profiles, setProfiles] = useState(initialProfiles);
 
-  // Else load up the page
-  const { id: channelId } = router.query
-  const { messages, channels } = useStore({ channelId })
-
+  // Realtime updates (optional)
   useEffect(() => {
-    messagesEndRef.current.scrollIntoView({
-      block: 'start',
-      behavior: 'smooth',
-    })
-  }, [messages])
+    const channel = supabase
+      .channel("room-updates")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "messages" },
+        async (payload) => {
+          const newMessage = payload.new;
+          const senderId = newMessage.user_id;
 
-  // redirect to public channel when current channel is deleted
-  useEffect(() => {
-    if (!channels.some((channel) => channel.id === Number(channelId))) {
-      router.push('/channels/1')
-    }
-  }, [channels, channelId])
+          // If profile not loaded yet → load it now
+          if (!profiles[senderId]) {
+            const { data } = await supabase
+              .from("profiles")
+              .select("*")
+              .eq("id", senderId)
+              .single();
 
-  // Render the channels and messages
+            setProfiles((prev) => ({ ...prev, [senderId]: data }));
+          }
+
+          setMessages((prev) => [...prev, newMessage]);
+        }
+      )
+      .subscribe();
+
+    return () => supabase.removeChannel(channel);
+  }, [profiles]);
+
   return (
-    <Layout channels={channels} activeChannelId={channelId}>
-      <div className="relative h-screen">
-        <div className="Messages h-full pb-16">
-          <div className="p-2 overflow-y-auto">
-            {messages.map((x) => (
-              <Message key={x.id} message={x} />
-            ))}
-            <div ref={messagesEndRef} style={{ height: 0 }} />
-          </div>
-        </div>
-        <div className="p-2 absolute bottom-0 left-0 w-full">
-          <MessageInput onSubmit={async (text) => addMessage(text, channelId, user.id)} />
-        </div>
-      </div>
-    </Layout>
-  )
+    <div className="p-4 space-y-4">
+      {messages.map((msg) => (
+        <Message
+          key={msg.id}
+          message={msg}
+          profile={profiles[msg.user_id]}
+        />
+      ))}
+    </div>
+  );
 }
 
-export default ChannelsPage
+export async function getServerSideProps({ params }) {
+  const channelId = params.id;
+
+  // Load messages
+  const { data: messages } = await supabase
+    .from("messages")
+    .select("*")
+    .eq("channel_id", channelId)
+    .order("created_at", { ascending: true });
+
+  // Extract sender IDs
+  const senderIds = [...new Set(messages.map((m) => m.user_id))];
+
+  // Load all sender profiles
+  const { data: profilesArr } = await supabase
+    .from("profiles")
+    .select("*")
+    .in("id", senderIds);
+
+  // Convert array → object map
+  const profiles = {};
+  if (profilesArr)
+    profilesArr.forEach((p) => {
+      profiles[p.id] = p;
+    });
+
+  return {
+    props: {
+      initialMessages: messages || [],
+      initialProfiles: profiles
+    }
+  };
+}

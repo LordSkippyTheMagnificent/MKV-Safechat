@@ -9,11 +9,15 @@ export async function getServerSideProps(context) {
     .eq("id", id)
     .single();
 
-  return { props: { profile: data || null } };
+  return {
+    props: {
+      profile: data || null
+    }
+  };
 }
 
 export default function UserProfile({ profile }) {
-  if (!profile) return <div className="p-8">User not found</div>;
+  if (!profile) return <div className="p-8">User not found.</div>;
 
   return (
     <div className="p-8 max-w-xl mx-auto text-center space-y-4">
@@ -21,8 +25,9 @@ export default function UserProfile({ profile }) {
         src={profile.pfp}
         className="mx-auto w-32 h-32 rounded-full"
       />
+
       <h1 className="text-3xl font-bold">{profile.username}</h1>
-      <p>{profile.bio}</p>
+      <p className="text-gray-600">{profile.bio}</p>
     </div>
   );
 }
